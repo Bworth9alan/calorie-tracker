@@ -205,7 +205,10 @@ def end_fast(data):
 
 st.set_page_config(page_title="Calorie Tracker App", layout="wide")
 
-data = load_data()
+if "data" not in st.session_state:
+    st.session_state.data = load_data()
+
+data = st.session_state.data
 
 if "selected_day" not in st.session_state:
     st.session_state.selected_day = str(date.today())
@@ -287,7 +290,7 @@ def open_food_day_dialog(day_str):
             item for idx, item in enumerate(updated_entries) if idx not in delete_indexes
         ]
         set_day_entries(data, day_str, final_entries)
-        save_data(data)
+        st.session_state.data = data
         st.success("Day updated.")
         st.rerun()
 
@@ -311,7 +314,7 @@ def open_weight_day_dialog(day_str):
 
     if st.button("Save Weight Changes"):
         save_weight_for_day(data, day_str, morning, evening)
-        save_data(data)
+        st.session_state.data = data
         st.success("Weight saved.")
         st.rerun()
 
@@ -328,7 +331,7 @@ user_name = st.text_input(
 )
 
 data["user_name"] = user_name
-save_data(data)
+st.session_state.data = data
 
 if user_name.strip():
     st.markdown(f"### Welcome, {user_name} 👋")
@@ -340,7 +343,7 @@ goal_weight = st.number_input(
     step=1.0,
 )
 data["goal_weight"] = goal_weight
-save_data(data)
+st.session_state.data = data
 
 daily_limit = goal_weight * 12
 daily_protein_target = goal_weight * 1
@@ -366,13 +369,13 @@ with fast_col1:
     if st.button("Start Fast"):
         if active_fast is None:
             start_fast(data)
-            save_data(data)
+            st.session_state.data = data
             st.rerun()
 
 with fast_col2:
     if st.button("End Fast"):
         hours = end_fast(data)
-        save_data(data)
+        st.session_state.data = data
         if hours is not None:
             st.success(f"Fast ended. Total time: {hours} hours")
         st.rerun()
@@ -418,7 +421,7 @@ with w3:
     st.write("")
     if st.button("Save Weight For Selected Day"):
         save_weight_for_day(data, selected_day, morning_weight, evening_weight)
-        save_data(data)
+        st.session_state.data = data
         st.success("Weight saved.")
         st.rerun()
 
@@ -471,7 +474,7 @@ with right:
                 "fat": edit_fat,
                 "calories": edit_calories,
             }
-            save_data(data)
+            st.session_state.data = data
             st.success(f"{selected_food} updated.")
             st.rerun()
 
@@ -501,7 +504,7 @@ if st.button("Add Selected Food"):
         data["logs"].setdefault(selected_day, []).append(
             {"food": selected_food, "amount": add_amount}
         )
-        save_data(data)
+        st.session_state.data = data
         st.success(f"Added {selected_food} to {selected_day}.")
         st.rerun()
 
@@ -532,7 +535,7 @@ with st.expander("Open Add New Food"):
                 "fat": new_food_fat,
                 "calories": new_food_calories,
             }
-            save_data(data)
+            st.session_state.data = data
             st.success(f"{new_food_name.strip()} saved.")
             st.rerun()
 
