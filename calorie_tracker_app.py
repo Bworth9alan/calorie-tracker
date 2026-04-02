@@ -318,6 +318,21 @@ def open_weight_day_dialog(day_str):
 
 st.title("Calorie Tracker App")
 
+# ===== USER NAME =====
+if "user_name" not in data:
+    data["user_name"] = ""
+
+user_name = st.text_input(
+    "Your Name",
+    value=data.get("user_name", "")
+)
+
+data["user_name"] = user_name
+save_data(data)
+
+if user_name.strip():
+    st.markdown(f"### Welcome, {user_name} 👋")
+
 goal_weight = st.number_input(
     "Goal Weight (lbs)",
     min_value=0.0,
