@@ -6,8 +6,11 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import calendar
 
+
 DATA_FILE = "calorie_tracker_data.json"
 
+# Eggs are the only count-based food.
+# Everything else is handled in ounces.
 DEFAULT_FOODS = {
     "Steak": {"unit": "oz", "protein": 7.0, "fat": 5.0, "calories": 75.0},
     "Ground Beef": {"unit": "oz", "protein": 7.0, "fat": 6.0, "calories": 80.0},
@@ -17,25 +20,38 @@ DEFAULT_FOODS = {
     "Tuna": {"unit": "oz", "protein": 7.0, "fat": 0.5, "calories": 35.0},
     "Oysters": {"unit": "oz", "protein": 2.0, "fat": 0.5, "calories": 20.0},
     "Eggs": {"unit": "egg", "protein": 6.0, "fat": 5.0, "calories": 70.0},
-    "Bacon": {"unit": "slice", "protein": 3.0, "fat": 3.0, "calories": 43.0},
-    "Butter": {"unit": "tbsp", "protein": 0.0, "fat": 11.0, "calories": 100.0},
+    "Bacon": {"unit": "oz", "protein": 8.0, "fat": 12.0, "calories": 150.0},
+    "Butter": {"unit": "oz", "protein": 0.0, "fat": 23.0, "calories": 204.0},
     "Cheese": {"unit": "oz", "protein": 7.0, "fat": 9.0, "calories": 110.0},
-    "Milk": {"unit": "cup", "protein": 8.0, "fat": 8.0, "calories": 150.0},
-    "Cottage Cheese": {"unit": "cup", "protein": 25.0, "fat": 5.0, "calories": 180.0},
-    "Plain Yogurt": {"unit": "cup", "protein": 10.0, "fat": 5.0, "calories": 150.0},
-    "Protein Drink": {"unit": "bottle", "protein": 30.0, "fat": 3.0, "calories": 160.0},
-    "Rice": {"unit": "cup", "protein": 4.0, "fat": 0.0, "calories": 200.0},
-    "Bread": {"unit": "slice", "protein": 3.0, "fat": 1.0, "calories": 80.0},
-    "Dates": {"unit": "date", "protein": 0.2, "fat": 0.0, "calories": 20.0},
-    "Almond Butter": {"unit": "tbsp", "protein": 3.5, "fat": 9.0, "calories": 98.0},
-    "Avocado": {"unit": "whole", "protein": 3.0, "fat": 22.0, "calories": 240.0},
+    "Milk": {"unit": "oz", "protein": 1.0, "fat": 1.0, "calories": 19.0},
+    "Cottage Cheese": {"unit": "oz", "protein": 3.1, "fat": 0.6, "calories": 28.0},
+    "Plain Yogurt": {"unit": "oz", "protein": 2.8, "fat": 1.4, "calories": 42.0},
+    "Protein Drink": {"unit": "oz", "protein": 1.9, "fat": 0.2, "calories": 10.0},
+    "Rice": {"unit": "oz", "protein": 0.7, "fat": 0.1, "calories": 37.0},
+    "Bread": {"unit": "oz", "protein": 2.6, "fat": 1.0, "calories": 75.0},
+    "Dates": {"unit": "oz", "protein": 0.7, "fat": 0.0, "calories": 79.0},
+    "Almond Butter": {"unit": "oz", "protein": 6.0, "fat": 16.0, "calories": 170.0},
+    "Avocado": {"unit": "oz", "protein": 0.6, "fat": 4.3, "calories": 45.0},
 }
 
-UNIT_OPTIONS = ["oz", "cup", "slice", "egg", "tbsp", "bottle", "date", "whole", "piece", "serving"]
+
+def is_eggs(food_name: str) -> bool:
+    return food_name.strip().lower() == "eggs"
+
+
+def normalize_food_unit(food_name: str, food_data: dict) -> dict:
+    """
+    Force everything to ounces except Eggs.
+    This keeps older saved data from showing random units.
+    """
+    normalized = food_data.copy()
+    normalized["unit"] = "egg" if is_eggs(food_name) else "oz"
+    return normalized
 
 
 def load_data():
     data = {}
+
     if os.path.exists(DATA_FILE):
         try:
             with open(DATA_FILE, "r") as f:
@@ -62,6 +78,7 @@ def load_data():
     if "fasts" not in data or not isinstance(data["fasts"], list):
         data["fasts"] = []
 
+    # Add defaults if missing
     for food_name, values in DEFAULT_FOODS.items():
         if food_name not in data["foods"]:
             data["foods"][food_name] = values.copy()
@@ -70,6 +87,13 @@ def load_data():
             for key, val in values.items():
                 if key not in existing:
                     existing[key] = val
+
+    # Normalize all food units:
+    # eggs = egg, everything else = oz
+    normalized_foods = {}
+    for food_name, food_data in data["foods"].items():
+        normalized_foods[food_name] = normalize_food_unit(food_name, food_data)
+    data["foods"] = normalized_foods
 
     return data
 
@@ -96,6 +120,7 @@ def calculate_day_totals(data, day_str):
     for entry in entries:
         food_name = entry["food"]
         amount = float(entry["amount"])
+
         if food_name in data["foods"]:
             food = data["foods"][food_name]
             total_protein += float(food["protein"]) * amount
@@ -109,6 +134,7 @@ def get_food_breakdown(data, entry):
     food_name = entry["food"]
     amount = float(entry["amount"])
     food = data["foods"][food_name]
+
     return {
         "food": food_name,
         "unit": food["unit"],
@@ -150,6 +176,7 @@ def save_weight_for_day(data, day_str, morning, evening):
 
 def build_weight_dataframe(data):
     rows = []
+
     for day_str, values in data["weights"].items():
         rows.append(
             {
@@ -167,9 +194,15 @@ def build_weight_dataframe(data):
 
 def build_calorie_dataframe(data):
     rows = []
+
     for day_str in sorted(data["logs"].keys()):
         _, _, total_calories = calculate_day_totals(data, day_str)
-        rows.append({"date": pd.to_datetime(day_str), "calories": total_calories})
+        rows.append(
+            {
+                "date": pd.to_datetime(day_str),
+                "calories": total_calories,
+            }
+        )
 
     if not rows:
         return pd.DataFrame()
@@ -187,7 +220,12 @@ def get_active_fast(data):
 def start_fast(data):
     if get_active_fast(data) is None:
         data["fasts"].append(
-            {"start": datetime.now().isoformat(), "end": None, "hours": None}
+            {
+                "start": datetime.now().isoformat(),
+                "end": None,
+                "hours": None,
+                "duration_display": None,
+            }
         )
 
 
@@ -196,22 +234,74 @@ def end_fast(data):
     if active is not None:
         end_time = datetime.now()
         start_time = datetime.fromisoformat(active["start"])
-        hours = round((end_time - start_time).total_seconds() / 3600, 2)
+        delta = end_time - start_time
+        hours = round(delta.total_seconds() / 3600, 2)
+
         active["end"] = end_time.isoformat()
         active["hours"] = hours
-        return hours
-    return None
+        active["duration_display"] = format_timedelta(delta)
+        return hours, format_timedelta(delta)
+
+    return None, None
 
 
-st.set_page_config(page_title="Calorie Tracker App", layout="wide")
+def format_timedelta(delta):
+    total_seconds = int(delta.total_seconds())
+    if total_seconds < 0:
+        total_seconds = 0
 
-if "data" not in st.session_state:
-    st.session_state.data = load_data()
+    days = total_seconds // 86400
+    remainder = total_seconds % 86400
+    hours = remainder // 3600
+    remainder = remainder % 3600
+    minutes = remainder // 60
+    seconds = remainder % 60
 
-data = st.session_state.data
+    return f"{days}d {hours:02}h {minutes:02}m {seconds:02}s"
+
+
+def get_current_fast_display(data):
+    active_fast = get_active_fast(data)
+    if not active_fast:
+        return None
+
+    start_time = datetime.fromisoformat(active_fast["start"])
+    now_time = datetime.now()
+    return format_timedelta(now_time - start_time)
+
+
+def build_day_food_dataframe(data, day_str):
+    entries = get_day_entries(data, day_str)
+    rows = []
+
+    for entry in entries:
+        breakdown = get_food_breakdown(data, entry)
+        rows.append(
+            {
+                "Food": breakdown["food"],
+                "Amount": breakdown["amount"],
+                "Unit": breakdown["unit"],
+                "Protein (g)": round(breakdown["protein"], 1),
+                "Fat (g)": round(breakdown["fat"], 1),
+                "Calories": round(breakdown["calories"], 1),
+            }
+        )
+
+    if not rows:
+        return pd.DataFrame()
+
+    return pd.DataFrame(rows)
+
+
+st.set_page_config(page_title="Calorie Tracker Webpage", layout="wide")
+
+data = load_data()
 
 if "selected_day" not in st.session_state:
     st.session_state.selected_day = str(date.today())
+
+if "food_entry_date" not in st.session_state:
+    st.session_state.food_entry_date = date.today()
 
 
 @st.dialog("Food Day Details", width="large")
@@ -242,13 +332,10 @@ def open_food_day_dialog(day_str):
     st.write("Foods Eaten:")
 
     food_names = sorted(list(data["foods"].keys()))
-
     updated_entries = []
     delete_indexes = set()
 
     for i, entry in enumerate(entries):
-        breakdown = get_food_breakdown(data, entry)
-
         st.markdown("---")
         row1, row2, row3 = st.columns([3, 2, 1])
 
@@ -260,9 +347,12 @@ def open_food_day_dialog(day_str):
                 key=f"dialog_food_{day_str}_{i}",
             )
 
+        chosen_food = data["foods"][current_food]
+        amount_label = "How many eggs?" if chosen_food["unit"] == "egg" else "How many ounces?"
+
         with row2:
             amount = st.number_input(
-                f"Amount {i+1}",
+                f"{amount_label} ({i+1})",
                 min_value=0.0,
                 value=float(entry["amount"]),
                 step=1.0,
@@ -274,7 +364,6 @@ def open_food_day_dialog(day_str):
 
         updated_entries.append({"food": current_food, "amount": amount})
 
-        chosen_food = data["foods"][current_food]
         st.write(
             f"Unit: **{chosen_food['unit']}** | "
             f"Protein: **{float(chosen_food['protein']) * amount:.1f} g** | "
@@ -290,7 +379,7 @@ def open_food_day_dialog(day_str):
             item for idx, item in enumerate(updated_entries) if idx not in delete_indexes
         ]
         set_day_entries(data, day_str, final_entries)
-        st.session_state.data = data
+        save_data(data)
         st.success("Day updated.")
         st.rerun()
 
@@ -314,27 +403,12 @@ def open_weight_day_dialog(day_str):
 
     if st.button("Save Weight Changes"):
         save_weight_for_day(data, day_str, morning, evening)
-        st.session_state.data = data
+        save_data(data)
         st.success("Weight saved.")
         st.rerun()
 
 
-st.title("Calorie Tracker App")
-
-# ===== USER NAME =====
-if "user_name" not in data:
-    data["user_name"] = ""
-
-user_name = st.text_input(
-    "Your Name",
-    value=data.get("user_name", "")
-)
-
-data["user_name"] = user_name
-st.session_state.data = data
-
-if user_name.strip():
-    st.markdown(f"### Welcome, {user_name} 👋")
+st.title("Calorie Tracker Webpage")
 
 goal_weight = st.number_input(
     "Goal Weight (lbs)",
@@ -343,7 +417,7 @@ goal_weight = st.number_input(
     step=1.0,
 )
 data["goal_weight"] = goal_weight
-st.session_state.data = data
+save_data(data)
 
 daily_limit = goal_weight * 12
 daily_protein_target = goal_weight * 1
@@ -354,7 +428,7 @@ g1, g2, g3 = st.columns(3)
 with g1:
     st.metric("Total Daily Calories", f"{daily_limit:.0f}")
 with g2:
-    st.metric("Daily Protein", f"{daily_protein_target:.0f} g")
+    st.metric("Daily Protein Target", f"{daily_protein_target:.0f} g")
 with g3:
     st.metric("Protein Calories", f"{daily_protein_target * 4:.0f}")
 
@@ -362,38 +436,63 @@ st.divider()
 
 st.subheader("Fast Tracker")
 
-fast_col1, fast_col2, fast_col3 = st.columns(3)
 active_fast = get_active_fast(data)
 
+fast_col1, fast_col2, fast_col3 = st.columns([1, 1, 2])
+
 with fast_col1:
-    if st.button("Start Fast"):
+    if st.button("Start Fast", use_container_width=True):
         if active_fast is None:
             start_fast(data)
-            st.session_state.data = data
+            save_data(data)
             st.rerun()
 
 with fast_col2:
-    if st.button("End Fast"):
-        hours = end_fast(data)
-        st.session_state.data = data
+    if st.button("End Fast", use_container_width=True):
+        hours, duration_display = end_fast(data)
+        save_data(data)
         if hours is not None:
-            st.success(f"Fast ended. Total time: {hours} hours")
+            st.success(f"Fast ended. Total time: {duration_display}")
         st.rerun()
 
 with fast_col3:
-    if active_fast:
-        started = datetime.fromisoformat(active_fast["start"])
-        running_hours = round((datetime.now() - started).total_seconds() / 3600, 2)
-        st.info(f"Current Fast: {running_hours} hours")
-    else:
-        if data["fasts"]:
-            last_fast = data["fasts"][-1]
-            if last_fast.get("hours") is not None:
-                st.info(f"Last Fast: {last_fast['hours']} hours")
+    # Live-ish display area. The page needs to rerun to visibly update.
+    # On Streamlit Community Cloud / many setups, this can update when the page reruns.
+    # If st.fragment is available in your version, this will auto-refresh every second.
+    try:
+        @st.fragment(run_every=1)
+        def fast_timer_fragment():
+            current_active_fast = get_active_fast(data)
+            if current_active_fast:
+                st.info(f"Current Fast: {get_current_fast_display(data)}")
             else:
-                st.info("No active fast")
+                if data["fasts"]:
+                    last_fast = data["fasts"][-1]
+                    if last_fast.get("duration_display"):
+                        st.info(f"Last Fast: {last_fast['duration_display']}")
+                    elif last_fast.get("hours") is not None:
+                        st.info(f"Last Fast: {last_fast['hours']} hours")
+                    else:
+                        st.info("No active fast")
+                else:
+                    st.info("No fast logged yet")
+
+        fast_timer_fragment()
+    except Exception:
+        # Fallback if fragment isn't supported
+        if active_fast:
+            st.info(f"Current Fast: {get_current_fast_display(data)}")
         else:
-            st.info("No fast logged yet")
+            if data["fasts"]:
+                last_fast = data["fasts"][-1]
+                if last_fast.get("duration_display"):
+                    st.info(f"Last Fast: {last_fast['duration_display']}")
+                elif last_fast.get("hours") is not None:
+                    st.info(f"Last Fast: {last_fast['hours']} hours")
+                else:
+                    st.info("No active fast")
+            else:
+                st.info("No fast logged yet")
 
 st.divider()
 
@@ -421,7 +520,7 @@ with w3:
     st.write("")
     if st.button("Save Weight For Selected Day"):
         save_weight_for_day(data, selected_day, morning_weight, evening_weight)
-        st.session_state.data = data
+        save_data(data)
         st.success("Weight saved.")
         st.rerun()
 
@@ -444,19 +543,20 @@ with left:
 with right:
     edit_food = st.toggle("Edit Selected Food")
     if edit_food:
-        edit_unit = st.text_input("Unit", value=food["unit"], key=f"edit_unit_{selected_food}")
+        st.write("Everything stays in ounces except Eggs.")
+
         edit_protein = st.number_input(
             "Protein per unit",
             min_value=0.0,
             value=float(food["protein"]),
-            step=0.5,
+            step=0.1,
             key=f"edit_protein_{selected_food}",
         )
         edit_fat = st.number_input(
             "Fat per unit",
             min_value=0.0,
             value=float(food["fat"]),
-            step=0.5,
+            step=0.1,
             key=f"edit_fat_{selected_food}",
         )
         edit_calories = st.number_input(
@@ -469,44 +569,73 @@ with right:
 
         if st.button("Save Food Edit"):
             data["foods"][selected_food] = {
-                "unit": edit_unit,
+                "unit": "egg" if is_eggs(selected_food) else "oz",
                 "protein": edit_protein,
                 "fat": edit_fat,
                 "calories": edit_calories,
             }
-            st.session_state.data = data
+            save_data(data)
             st.success(f"{selected_food} updated.")
             st.rerun()
 
 st.markdown("### Add Food To Selected Day")
 
-amount_label = f"How many {food['unit']} did you eat?"
+entry_date = st.date_input(
+    "Choose date for food entry",
+    value=st.session_state.food_entry_date,
+    key="food_entry_date_picker",
+)
+st.session_state.food_entry_date = entry_date
+food_entry_day_str = str(entry_date)
+
+if selected_food == "Eggs":
+    amount_label = "How many eggs did you have?"
+else:
+    amount_label = "How many ounces did you have?"
+
 add_amount = st.number_input(
     amount_label,
     min_value=0.0,
     step=1.0,
-    key=f"amount_{selected_food}_{selected_day}",
+    key=f"amount_{selected_food}_{food_entry_day_str}",
 )
 
 calc_protein = float(food["protein"]) * add_amount
 calc_fat = float(food["fat"]) * add_amount
 calc_calories = float(food["calories"]) * add_amount
 
-st.write(f"Adding to: **{selected_day}**")
+st.write(f"Adding to: **{food_entry_day_str}**")
 st.write(f"Protein: **{calc_protein:.1f} g**")
 st.write(f"Fat: **{calc_fat:.1f} g**")
 st.write(f"Calories: **{calc_calories:.1f}**")
 
-if st.button("Add Selected Food"):
-    if add_amount <= 0:
-        st.error("Enter an amount greater than 0.")
-    else:
-        data["logs"].setdefault(selected_day, []).append(
-            {"food": selected_food, "amount": add_amount}
-        )
-        st.session_state.data = data
-        st.success(f"Added {selected_food} to {selected_day}.")
+add_col1, add_col2 = st.columns(2)
+
+with add_col1:
+    if st.button("Add Selected Food", use_container_width=True):
+        if add_amount <= 0:
+            st.error("Enter an amount greater than 0.")
+        else:
+            data["logs"].setdefault(food_entry_day_str, []).append(
+                {"food": selected_food, "amount": add_amount}
+            )
+            save_data(data)
+            st.session_state.selected_day = food_entry_day_str
+            st.success(f"Added {selected_food} to {food_entry_day_str}.")
+            st.rerun()
+
+with add_col2:
+    if st.button("Set Selected Day To This Date", use_container_width=True):
+        st.session_state.selected_day = food_entry_day_str
+        st.success(f"Selected day changed to {food_entry_day_str}.")
         st.rerun()
+
+selected_day_df = build_day_food_dataframe(data, food_entry_day_str)
+if not selected_day_df.empty:
+    st.markdown(f"#### Foods already saved for {food_entry_day_str}")
+    st.dataframe(selected_day_df, use_container_width=True)
+else:
+    st.write(f"No foods saved yet for {food_entry_day_str}.")
 
 st.divider()
 
@@ -514,29 +643,42 @@ st.subheader("Add New Food")
 
 with st.expander("Open Add New Food"):
     new_food_name = st.text_input("Food Name")
-    new_food_unit = st.selectbox("Unit", UNIT_OPTIONS)
+
+    st.write("Everything new will be saved in ounces except Eggs.")
+
     new_food_protein = st.number_input(
-        "Protein per unit", min_value=0.0, step=0.5, key="new_food_protein"
+        "Protein per unit",
+        min_value=0.0,
+        step=0.1,
+        key="new_food_protein",
     )
     new_food_fat = st.number_input(
-        "Fat per unit", min_value=0.0, step=0.5, key="new_food_fat"
+        "Fat per unit",
+        min_value=0.0,
+        step=0.1,
+        key="new_food_fat",
     )
     new_food_calories = st.number_input(
-        "Calories per unit", min_value=0.0, step=1.0, key="new_food_calories"
+        "Calories per unit",
+        min_value=0.0,
+        step=1.0,
+        key="new_food_calories",
     )
 
     if st.button("Save New Food"):
-        if not new_food_name.strip():
+        clean_name = new_food_name.strip()
+
+        if not clean_name:
             st.error("Enter a food name.")
         else:
-            data["foods"][new_food_name.strip()] = {
-                "unit": new_food_unit,
+            data["foods"][clean_name] = {
+                "unit": "egg" if is_eggs(clean_name) else "oz",
                 "protein": new_food_protein,
                 "fat": new_food_fat,
                 "calories": new_food_calories,
             }
-            st.session_state.data = data
-            st.success(f"{new_food_name.strip()} saved.")
+            save_data(data)
+            st.success(f"{clean_name} saved.")
             st.rerun()
 
 st.divider()
@@ -577,15 +719,24 @@ for week in month_grid:
                 day_str = str(date(year_choice, month_choice, day_num))
                 _, _, total_calories = calculate_day_totals(data, day_str)
                 color = get_day_color(total_calories, daily_limit)
+
                 if st.button(
                     f"{color} {day_num}",
                     key=f"food_day_{day_str}",
                     use_container_width=True,
                 ):
                     st.session_state.selected_day = day_str
+                    st.session_state.food_entry_date = date.fromisoformat(day_str)
                     open_food_day_dialog(day_str)
 
 st.write(f"**Selected Food Day:** {st.session_state.selected_day}")
+
+selected_food_day_df = build_day_food_dataframe(data, st.session_state.selected_day)
+if not selected_food_day_df.empty:
+    st.markdown(f"### Foods for {st.session_state.selected_day}")
+    st.dataframe(selected_food_day_df, use_container_width=True)
+else:
+    st.write(f"No foods logged yet for {st.session_state.selected_day}.")
 
 st.subheader("Weight Calendar")
 
@@ -626,7 +777,7 @@ with graph_col1:
             st.write("No weight data yet.")
         else:
             weekly_df = weight_df[
-                weight_df["date"] >= (pd.Timestamp.today() - pd.Timedelta(days=7))
+                weight_df["date"] >= (pd.Timestamp.today().normalize() - pd.Timedelta(days=7))
             ]
 
             fig, ax = plt.subplots(figsize=(10, 4))
@@ -666,7 +817,7 @@ with graph_col2:
             st.write("No calorie data yet.")
         else:
             weekly_cal_df = cal_df[
-                cal_df["date"] >= (pd.Timestamp.today() - pd.Timedelta(days=7))
+                cal_df["date"] >= (pd.Timestamp.today().normalize() - pd.Timedelta(days=7))
             ]
 
             fig, ax = plt.subplots(figsize=(10, 4))
@@ -682,6 +833,7 @@ with graph_col2:
                     color="green",
                     label="Under",
                 )
+
             if not over_df.empty:
                 ax.plot(
                     over_df["date"],
